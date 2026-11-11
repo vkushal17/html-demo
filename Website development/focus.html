@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Focus Timer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 3rem 1rem;
+      font-family: Arial, sans-serif;
+      background: #f4f6fb;
+      color: #1f2937;
+    }
+    main { max-width: 760px; margin: 0 auto; text-align: center; }
+    #focus-mode-button {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 10;
+    }
+    button, input { font: inherit; }
+    button {
+      padding: 0.65rem 1rem;
+      border: 0;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+    button.secondary { background: #64748b; }
+    button.danger { background: #dc2626; }
+    button:disabled { cursor: default; opacity: 0.55; }
+    #timer-controls, #timer-actions { margin-top: 1rem; }
+    #timer-actions { display: flex; justify-content: center; gap: 0.5rem; }
+    #timer {
+      margin: 1rem 0;
+      font-size: clamp(4rem, 18vw, 8rem);
+      font-variant-numeric: tabular-nums;
+    }
+    #study-content {
+      margin-top: 3rem;
+      padding: 1.5rem;
+      border-radius: 8px;
+      background: white;
+    }
+    body.focus-mode #timer-controls,
+    body.focus-mode #study-content,
+    body.focus-mode #game { display: none; }
+  </style>
+</head>
+<body>
+  <button id="focus-mode-button" type="button" aria-pressed="false">Focus mode</button>
+
+  <main>
+    <div id="timer-controls">
+      <label for="focus-minutes">Focus time (minutes):</label>
+      <input id="focus-minutes" type="number" min="1" max="180" value="25">
+      <button id="start-button" type="button">Start focus</button>
+    </div>
+
+    <p id="timer" aria-live="polite">25:00</p>
+    <div id="timer-actions">
+      <button id="pause-button" class="secondary" type="button" disabled>Pause</button>
+      <button id="stop-button" class="danger" type="button" disabled>Stop</button>
+    </div>
+    <p id="message"></p>
+
+    <section id="study-content">
+      <h2>Study area</h2>
+    </section>
+
+    <section id="game" hidden>
+      <h2>Focus session complete! Take a mini-game break.</h2>
+      <p>Guess a number from 1 to 10:</p>
+      <input id="guess" type="number" min="1" max="10">
+      <button id="guess-button" type="button">Guess</button>
+      <p id="game-message" aria-live="polite"></p>
+      <button id="new-game-button" type="button">Play again</button>
+    </section>
+  </main>
+
+  <script>
+    const timerDisplay = document.querySelector("#timer");
+    const message = document.querySelector("#message");
+    const game = document.querySelector("#game");
+    const startButton = document.querySelector("#start-button");
+    const pauseButton = document.querySelector("#pause-button");
+    const stopButton = document.querySelector("#stop-button");
+    const minutesInput = document.querySelector("#focus-minutes");
+    const focusModeButton = document.querySelector("#focus-mode-button");
+    let interval;
+    let secondsLeft = 25 * 60;
+    let isPaused = false;
+    let isRunning = false;
+
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = String(seconds % 60).padStart(2, "0");
+      return `${minutes}:${remainingSeconds}`;
+    }
+
+    function enterFullscreen() {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {
+          message.textContent = "Focus timer started, but fullscreen was not allowed by the browser.";
+        });
+      }
+    }
+
+    function exitFullscreen() {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function startTimer() {
+      clearInterval(interval);
+      interval = setInterval(() => {
+        secondsLeft--;
+        timerDisplay.textContent = formatTime(secondsLeft);
+
+        if (secondsLeft <= 0) {
+          clearInterval(interval);
+          isRunning = false;
+          pauseButton.disabled = true;
+          stopButton.disabled = true;
+          message.textContent = "Nice work—you completed your focus session!";
+          game.hidden = false;
+          startNewGame();
+          exitFullscreen();
+        }
+      }, 1000);
+    }
+
+    startButton.addEventListener("click", () => {
+      const minutes = Number(minutesInput.value);
+
+      if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) {
+        message.textContent = "Choose a time from 1 to 180 minutes.";
+        return;
+      }
+
+      clearInterval(interval);
+      game.hidden = true;
+      secondsLeft = minutes * 60;
+      isPaused = false;
+      isRunning = true;
+      timerDisplay.textContent = formatTime(secondsLeft);
+      message.textContent = "Focus session in progress.";
+      pauseButton.textContent = "Pause";
+      pauseButton.disabled = false;
+      stopButton.disabled = false;
+      startTimer();
+      enterFullscreen();
+    });
+
+    pauseButton.addEventListener("click", () => {
+      if (!isRunning) return;
+
+      if (isPaused) {
+        isPaused = false;
+        pauseButton.textContent = "Pause";
+        message.textContent = "Focus session in progress.";
+        startTimer();
+      } else {
+        isPaused = true;
+        clearInterval(interval);
+        pauseButton.textContent = "Resume";
+        message.textContent = "Timer paused.";
+      }
+    });
+
+    stopButton.addEventListener("click", () => {
+      clearInterval(interval);
+      isRunning = false;
+      isPaused = false;
+
+      const minutes = Number(minutesInput.value);
+      secondsLeft = Number.isInteger(minutes) && minutes >= 1 && minutes <= 180
+        ? minutes * 60
+        : 25 * 60;
+      timerDisplay.textContent = formatTime(secondsLeft);
+      message.textContent = "Focus session stopped.";
+      pauseButton.textContent = "Pause";
+      pauseButton.disabled = true;
+      stopButton.disabled = true;
+      exitFullscreen();
+    });
+
+    focusModeButton.addEventListener("click", () => {
+      const enabled = document.body.classList.toggle("focus-mode");
+      focusModeButton.textContent = enabled ? "Exit focus mode" : "Focus mode";
+      focusModeButton.setAttribute("aria-pressed", String(enabled));
+    });
+
+    let answer;
+
+    function startNewGame() {
+      answer = Math.floor(Math.random() * 10) + 1;
+      document.querySelector("#guess").value = "";
+      document.querySelector("#game-message").textContent = "";
+    }
+
+    document.querySelector("#guess-button").addEventListener("click", () => {
+      const guess = Number(document.querySelector("#guess").value);
+      const result = document.querySelector("#game-message");
+
+      if (!Number.isInteger(guess) || guess < 1 || guess > 10) {
+        result.textContent = "Enter a whole number from 1 to 10.";
+      } else if (guess === answer) {
+        result.textContent = "Correct! 🎉";
+      } else if (guess < answer) {
+        result.textContent = "Try a higher number.";
+      } else {
+        result.textContent = "Try a lower number.";
+      }
+    });
+
+    document.querySelector("#new-game-button").addEventListener("click", startNewGame);
+  </script>
+</body>
+</html>
